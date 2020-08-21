@@ -3,32 +3,35 @@ from discord.ext import commands, tasks
 from discord.utils import get
 import pdb
 import copy
+from datetime import datetime
+
 client = commands.Bot(command_prefix = '.')
 #ticket id + number needed
 tickets = []
 queue = []
-called = {'boosters': []}
+called = {}
 inRaids = []
 ongoingTickets = []
 
 @client.event
 async def on_ready():
-    print('Bot is Ready')
+    callNextBooster.start()
+    removeAFK.start()
 
-async def callBoosters(channelMention,booster=None, number=None):
+async def callBoosters(channelMention,booster=None, number=None, calledByTimer=False):
     queueIter = queue.copy() #deep copy
     totalNeeded = sum(int(ticket['needed']) for ticket in tickets)
-    if totalNeeded > len(called['boosters']):
+    if totalNeeded > len(called) or calledByTimer:
         #fill
         if number is not None:
             for queueBooster in queueIter[:number]:
                 await queueBooster.send(f'{channelMention} requires a team, would you like to join?')
-                called['boosters'].append(queueBooster.id)
+                called[queueBooster.id] = {'booster': queueBooster, 'joined': datetime.now()}
                 queue.remove(queue[0])
         else:
             #join or leav
             await booster.send(f'{channelMention} requires a team, would you like to join?')
-            called['boosters'].append(booster.id)
+            called[booster.id] = {'booster': booster, 'joined': datetime.now()}
             queue.remove(queue[0])
 
 @client.command()
@@ -150,10 +153,14 @@ async def add(ctx, number):
                 ticketToUpdate['needed'] = ticketToUpdate['needed']-1
                 tickets[ticketIndex] = ticketToUpdate
                 inRaids.append(ctx.author)
+                if ctx.author in queue:
+                    queue.remove(ctx.author)
                 await fill(ctx, ticketToUpdate['needed'])
         if notExisting:
             inRaids.append(ctx.author)
             ticketToAdd = {'channel': ctx.channel, 'ticketMention':ctx.channel.mention, 'needed':int(number), 'team': [ctx.author]}
+            if ctx.author in queue:
+                queue.remove(ctx.author)
             await fill(ctx, number, ticketToAdd)
     else:
         await ctx.author.send(f'You do not have the correct privelages to add, or you might be in a raid already')
@@ -162,7 +169,7 @@ async def add(ctx, number):
 async def accept(ctx):
     booster = ctx.author
     if len(tickets) > 0:
-        if booster.id in called['boosters']:
+        if booster.id in called.keys():
             ticket = tickets[0]
             ticket['needed'] = ticket['needed']-1
             ticket['team'].append(booster)
@@ -174,17 +181,40 @@ async def accept(ctx):
                 await ticket['channel'].send(data)
                 ongoingTickets.append({'channel':ticket['channel'],'needed':0, 'team': [booster for booster in ticket['team']]})
                 del tickets[0]
-                called['boosters'].remove(booster.id)
+                called.pop(booster.id, None)
             else:
                 tickets[0] = ticket
-                called['boosters'].remove(booster.id)
+                called.pop(booster.id, None)
             inRaids.append(booster)
         else:
             await booster.send('You have not been called yet')
     else:
-        if booster.id in called['boosters']:
-            called['boosters'].remove(booster.id)
+        if booster.id in called.keys():
+            called.pop(booster.id, None)
             queue.insert(0,booster)
             await booster.send('no tickets available to accept currently, added to the front of queue')
+        else:
+            await booster.send('You have not been called yet')
 
-client.run('NzQ1Mzc2NjI5OTkxNDA3Njc2.Xzw4FQ.9kBrm1GggnAFX-Ag_LaPEWwKanw') 
+@tasks.loop(seconds=10)
+async def callNextBooster():
+    now = datetime.now()
+    localCalled = called.copy()
+    for boosterid in localCalled.copy():
+        delta = now - localCalled[boosterid]['joined']
+        if delta.total_seconds() > 10 and len(queue) > 0:
+            await callBoosters(tickets[0]['ticketMention'],booster=queue[0],calledByTimer=True)
+    print('tick')
+
+@tasks.loop(seconds=30)
+async def removeAFK():
+    now = datetime.now()
+    localCalled = called.copy()
+    for boosterid in localCalled.copy():
+        delta = now - localCalled[boosterid]['joined']
+        if delta.total_seconds() > 30:
+            called.pop(boosterid)
+            await localCalled[boosterid]['booster'].send('You have been removed from the called list as you were AFK for too long')
+    print('tick')
+
+client.run('NzQ1Mzc2NjI5OTkxNDA3Njc2.Xzw4FQ.vjmg4uhYokG8SlHvWaPeBphzdnQ') 
