@@ -221,12 +221,13 @@ async def findteam(ctx, number, ticketOverride=None):
 @client.command()
 @commands.has_any_role(712383579505819719,712383579505819718)
 async def addteacher(ctx, number):
+    channel = get(ctx.message.guild.channels, id=712383579719467146, type=discord.ChannelType.text)
     if ctx.author not in inRaids:
         if ctx.author in queue:
             queue.remove(ctx.author)
         inRaids.append(ctx.author)
         ticketToAdd = {'channel': ctx.channel, 'ticketMention':ctx.channel.mention, 'needed':int(number), 'team': [ctx.author]}
-        await fill(ctx, number, ticketToAdd)
+        await findteam(ctx, number, ticketToAdd)
     else:
         await ctx.author.send(f'you might be in a raid already')
 
