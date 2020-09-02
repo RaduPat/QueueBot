@@ -5,13 +5,26 @@ import pdb
 import copy
 from datetime import datetime
 import re
+import json
+import sys 
 client = commands.Bot(command_prefix = '-')
-#ticket id + number needed
 tickets = []
 queue = []
 called = {}
 inRaids = []
 ongoingTickets = []
+
+def get_config():
+    env = sys.argv[1] if len(sys.argv) > 1 else None
+    with open("config.json", "rb") as configObj:
+        fullconfig = json.load(configObj)
+        if str(env) == 'dev':
+            config = fullconfig['dev']
+        else:
+            config = fullconfig['pvm_service']
+    return config
+
+config = get_config()
 
 @client.event
 async def on_ready():
@@ -34,7 +47,7 @@ async def callBoosters(channelMention,booster=None, number=None, calledByTimer=F
             queue.remove(queue[0])
 
 @client.command()
-@commands.has_any_role(712383579480653873,712383579505819719)
+@commands.has_any_role(*config['general'])
 async def end(ctx):
     for ticket in ongoingTickets:
         if ticket['channel'] == ctx.channel:
@@ -48,7 +61,7 @@ async def end(ctx):
                 inRaids.remove(booster)
 
 @client.command()
-@commands.has_any_role(712383579480653873,712383579505819719)
+@commands.has_any_role(*config['general'])
 async def join(ctx):
     booster = ctx.author
     okayToJoin = True
@@ -56,8 +69,9 @@ async def join(ctx):
         if booster.id == member.id:
             await ctx.send(f'{member.mention} has already joined the queue!')
             okayToJoin = False
-    if booster in inRaids:
-        await ctx.send(f' {booster.mention} is already in a raid. end the raid if you would like to rejoin!')
+    #check called list as well for the user
+    if booster in inRaids or booster.id in called:
+        await ctx.send(f' {booster.mention} is already in a raid or as been called!')
         okayToJoin = False
     if okayToJoin:
         queue.append(booster)
@@ -66,13 +80,23 @@ async def join(ctx):
         await callBoosters(tickets[0]['ticketMention'], booster=ctx.author)
 
 @client.command()
-@commands.has_any_role(712383579480653873,712383579505819719)
+@commands.has_any_role(*config['general'])
 async def q(ctx):
     index = 1
     boosters = ''
     embedMsg = discord.Embed(color=0x00ff00)
     embedMsg.set_author(name=ctx.author.name,icon_url= ctx.author.avatar_url)
     embedMsg.set_thumbnail(url='https://cdn.discordapp.com/attachments/725874308089643112/747078186411491429/pvmservicesgif.gif')
+    if len(called) > 0:
+        for boosterID in called:
+            booster = called[boosterID]['booster']
+            boosters = boosters + f'**{index}.** {booster.name}\n'
+            index = index+1
+    else:
+        boosters = '\u200b'
+    embedMsg.add_field(name="Called",value=boosters,inline=False)
+    index = 1
+    boosters = ''
     if len(queue) > 0:
         for booster in queue:
             boosters = boosters + f'**{index}.** {booster.name}\n'
@@ -83,7 +107,7 @@ async def q(ctx):
     await ctx.send(embed = embedMsg)
 
 @client.command()
-@commands.has_any_role(712383579480653873,712383579505819719)
+@commands.has_any_role(*config['general'])
 async def showtickets(ctx):
     data = ''
     embedMsg = discord.Embed(color=0x00ff00)
@@ -113,7 +137,7 @@ async def showtickets(ctx):
     await ctx.send(embed=embedMsg)
 
 @client.command()
-@commands.has_any_role(712383579480653873,712383579505819719)
+@commands.has_any_role(*config['general'])
 async def qhelp(ctx):
     embedMsg = discord.Embed(title="Queue commands",color=0x00ff00)
     embedMsg.set_author(name=ctx.author.name,icon_url= ctx.author.avatar_url)
@@ -126,19 +150,17 @@ async def qhelp(ctx):
     embedMsg.add_field(name="-q",value="show the current queue",inline=False)
     embedMsg.add_field(name="-end",value="Ticket is done for now, will allow everyone on the team to reapply for the queue",inline=False)
     embedMsg.add_field(name="Staff Commands",value="** **",inline=False)
-    embedMsg.add_field(name="-findteam X",value="find X number of boosters to join a ticket. \nUSAGE: -findteam 2",inline=False)
     embedMsg.add_field(name="-addtoq Booster X",value="add booster to queue. if X is empty, append to end of queue else insert at that postion of queue\nUSAGE: -addtoq @booster 0",inline=False)
     embedMsg.add_field(name="-createteam *boosters number",value="Create a ticket with a predefined team. if number is blank, inputted team is the set team. If number is a valid int it will look for that many boosters to join \nUSAGE: -createteam @booster1 @booster2 2",inline=False)
     await ctx.author.send(embed=embedMsg)
 
 @client.command()
-@commands.has_any_role(712383579480653873,712383579505819719)
+@commands.has_any_role(*config['general'])
 async def leave(ctx):
     #if ongoing ticket, move to open tickets
     #if open ticket, remove from team increase needed
     #ongoing ticket
-    channel = get(ctx.message.guild.channels, id=712383579719467146, type=discord.ChannelType.text)
-    #channel = get(ctx.message.guild.channels, id=745417713421123614, type=discord.ChannelType.text)
+    channel = get(ctx.message.guild.channels, id=config['tob_chat'], type=discord.ChannelType.text)
     booster = ctx.author
     for boosterIndx in queue:
         if booster.id == boosterIndx.id:
@@ -169,7 +191,7 @@ async def leave(ctx):
             await callBoosters(tickets[0]['ticketMention'], number=1)
 
 @client.command()
-@commands.has_any_role(712383579505819719)
+@commands.has_any_role(*config['staff'])
 async def addtoq(ctx, booster, index=None):
     char_list = ['<','@','!','>']
     user = client.get_user(int(re.sub("|".join(char_list), "", booster)))
@@ -182,11 +204,8 @@ async def addtoq(ctx, booster, index=None):
             except:
                 print('invalid index passed or user passed')
 
-@client.command()
-@commands.has_any_role(712383579505819719)
 async def findteam(ctx, number, ticketOverride=None):
-    channel = get(ctx.message.guild.channels, id=712383579719467146, type=discord.ChannelType.text)
-    #channel = get(ctx.message.guild.channels, id=745417713421123614, type=discord.ChannelType.text)
+    channel = get(ctx.message.guild.channels, id=config['tob_chat'], type=discord.ChannelType.text)
     okayToAddTicket = True
     for ticket in tickets:
         if ticket['ticketMention'] == ctx.channel.mention:
@@ -202,7 +221,7 @@ async def findteam(ctx, number, ticketOverride=None):
     await callBoosters(ctx.channel.mention, number=int(number))
 
 @client.command()
-@commands.has_any_role(712383579505819719)
+@commands.has_any_role(*config['staff'])
 async def createteam(ctx, *boosters):
     char_list = ['<','@','!','>']
     team = []
@@ -214,38 +233,52 @@ async def createteam(ctx, *boosters):
     except:
         number = None
         pass
-    for booster in boosters:
-        user = client.get_user(int(re.sub("|".join(char_list), "", booster)))
-        if user not in inRaids:
-            for ticket in tickets:
-                if ticket['ticketMention'] == ctx.channel.mention:
-                    okayToAdd = False
-                    await ctx.send(f'ticket is already opened. -end to recreate')
-            for ticket in ongoingTickets:
-                if ticket['channel'] == ctx.channel:
-                    okayToAdd = False
-                    await ctx.send(f'ticket is already ongoing. -end to recreate')
-            team.append(user)
-        else:
-            okayToAdd = False
-            await ctx.send(f'{user.name} is already in a raid, ask them to leave their raid before creating the team with them')
-            break
-    if okayToAdd:
-        for user in team:
-            if user in queue:
-                queue.remove(user)
-            if user.id in called.keys():
-                called.pop(user.id)
-            inRaids.append(user)
-        if number is None:
+    #GETTEAM
+    #get type of ticket, NEW, EXISTING, ONGOING
+    ticketType = None
+    for ticket in tickets:
+        if ticket['channel'] == ctx.channel:
+            tickets.remove(ticket)
+            ticketType = "EXISTING"
+    for ticket in ongoingTickets:
+        if ticket['channel'] == ctx.channel:
+            ticketType = "ONGOING"
+    ticketType = "NEW" if ticketType == None else ticketType
+    if ticketType in ["NEW", "EXISTING"]:
+        for booster in boosters:
+            user = client.get_user(int(re.sub("|".join(char_list), "", booster)))
+            if user not in inRaids:
+                team.append(user)
+                if user in queue:
+                    queue.remove(user)
+                if user.id in called.keys():
+                    called.pop(user.id)
+                for ticket in tickets:
+                    if user in ticket['team']:
+                        ticket['team'].remove(user)
+            else:
+                await ctx.send(f'{user.name} is already in a raid. THEY WILL NOT BE ADDED TO THIS TICKET')
+        #we have the potential team
+        totalNeeded = len(boosters) - len(team) + int(number) if number != None else len(boosters) - len(team)
+        if totalNeeded == 0:
             ongoingTickets.append({'channel': ctx.channel, 'needed':0, 'team': team})
+            inRaids.extend(team)
         else:
-            await findteam(ctx, int(number), {'channel': ctx.channel, 'ticketMention':ctx.channel.mention, 'needed':int(number), 'team': team})
+            await findteam(ctx, totalNeeded, {'channel': ctx.channel, 'ticketMention':ctx.channel.mention, 'needed':totalNeeded, 'team': team})
+    else:
+        await ctx.send(f'ticket is already ongoing. -end to recreate')
          
 @client.command()
-@commands.has_any_role(712383579480653873,712383579505819719)
+@commands.has_any_role(*config['general'])
+async def out(ctx):
+    if len(queue) > 0 and len(tickets) >0 and ctx.author.id in called:
+        await callBoosters(tickets[0]['ticketMention'],booster=queue[0],calledByTimer=True)
+    called.pop(ctx.author.id)
+
+@client.command()
+@commands.has_any_role(*config['general'])
 async def here(ctx):
-    channel = get(ctx.message.guild.channels, id=712383579719467146, type=discord.ChannelType.text)
+    channel = get(ctx.message.guild.channels, id=config['tob_chat'], type=discord.ChannelType.text)
     booster = ctx.author
     if len(tickets) > 0:
         if booster.id in called.keys():
@@ -257,6 +290,7 @@ async def here(ctx):
                 data = 'Your team is '
                 for boost in team:
                     data = data + f'{boost.mention} '
+                    inRaids.append(boost)
                 await ticket['channel'].send(data)
                 ongoingTickets.append({'channel':ticket['channel'],'needed':0, 'team': [booster for booster in ticket['team']]})
                 del tickets[0]
@@ -264,7 +298,6 @@ async def here(ctx):
             else:
                 tickets[0] = ticket
                 called.pop(booster.id, None)
-            inRaids.append(booster)
             channelMention = ticket['channel'].mention
             await channel.send(f'{booster.mention} has joined the team for {channelMention}')
         else:
@@ -290,4 +323,4 @@ async def callNextBooster():
             await localCalled[boosterid]['booster'].send('You have been removed from the called list as you were AFK for too long')
     print(f'callnext +{now}')
 
-client.run('')
+client.run(config['token'])
