@@ -13,6 +13,8 @@ import re
 ORDERS = "orders/"
 CHANNELS = "channels/"
 ASSOCIATIONS = 'associations.json'
+    
+
 def get_order(order_id, folder):
     filename = f"{order_id}.json"
     try:
@@ -22,6 +24,47 @@ def get_order(order_id, folder):
             return data
     except:
         return None
+
+def generate_embed(ctx, title, desc):
+    embed = discord.Embed(title=title, color=0x0FF0FF, description=desc)
+    embed.set_author(name=f"{ctx.author.name}", icon_url=ctx.author.avatar_url)
+    embed.set_thumbnail(url=ctx.guild.icon_url_as(format="gif"))
+    return embed
+
+async def moveTicket(channel, ctx, config,embed, commandType):
+    ch_name = channel.name.lower()
+    if "tob" in ch_name and "login" not in ch_name:
+        await awaitMoveChannel(channel, config['category_tob'], ctx)
+        return
+    if "tob-login" in ch_name:
+        await awaitMoveChannel(channel, config['category_logins'], ctx)
+        return
+    if "bosses" in ch_name and "corp" not in ch_name:
+        await awaitMoveChannel(channel, config['category_pvm'], ctx)
+        return
+    if "bosses" in ch_name and "corp" not in ch_name:
+        await awaitMoveChannel(channel, config['category_pvm'], ctx)
+        return
+    if "bosses-corp" in ch_name:
+        await awaitMoveChannel(channel, config['category_corp'], ctx)
+        return
+    if "corr" in ch_name:
+        if commandType == 'end' or commandType == 'ready':
+            await awaitMoveChannel(channel, config['category_need_team'], ctx)
+            corrgID = config['gauntlet']
+            await channel.send(f'<@&{corrgID}>')
+        elif commandType == 'pause':
+            await awaitMoveChannel(channel, config['category_pvm'], ctx)
+        return
+    if "cox" in ch_name:
+        await awaitMoveChannel(channel, config['category_cox'], ctx)
+        return
+    if "fire" in ch_name or "infernal" in ch_name:
+        await awaitMoveChannel(channel, config['category_infernal'], ctx)
+        return            
+
+async def awaitMoveChannel(channel, category, ctx):
+    await channel.edit(category=get(ctx.guild.categories, id=category))
 
 def getticket(channel, tickets):
     for ticket in tickets:
@@ -117,7 +160,6 @@ def get_boost_commands(df):
         count = result['count']['sum']._get_value(index)
         commands.append(f'-boost {order} {count} {team}')
     return commands
-
 
 def get_embed(ctx):
     embedMsg = discord.Embed(color=0x00ff00)

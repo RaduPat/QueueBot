@@ -46,7 +46,8 @@ class order(commands.Cog):
             if helper.is_valid_id(channelID,CHANNELS):
                 channeldata = helper.get_order(channelID, CHANNELS)
                 for orderindx in range(0,len(channeldata['orders'])):
-                    foundorder = True
+                    if orderid == channeldata['orders'][orderindx]['order_id']:
+                        foundorder = True
                 if not foundorder:
                     associations['orders'][f'{orderid}'] = {'channel':channelID}
                     channeldata["orders"].append(orderdetails)
@@ -78,7 +79,7 @@ class order(commands.Cog):
         await ctx.author.send(embed = embedMsg)
 
     @commands.command()
-    @commands.has_any_role(*config['staff'])
+    @commands.has_any_role(*config['pvm'])
     async def kcn(self, ctx, number=None):
         try:
             if number is not None:
@@ -122,7 +123,7 @@ class order(commands.Cog):
         await ctx.message.delete()
 
     @commands.command()
-    @commands.has_any_role(*config['general'])
+    @commands.has_any_role(*config['pvm'])
     async def kc(self, ctx):
         channelID = ctx.channel.id
         boosterList = None
@@ -160,7 +161,7 @@ class order(commands.Cog):
         await ctx.message.delete()
 
     @commands.command()
-    @commands.has_any_role(*config['general'])
+    @commands.has_any_role(*config['pvm'])
     async def undo(self, ctx):
         channelID = ctx.channel.id
         if helper.is_valid_id(channelID,CHANNELS):
@@ -262,7 +263,6 @@ class order(commands.Cog):
         #get channel associated with this order
         order_id = args[0]
         boosters = args[2:]
-        pdb.set_trace()
         for boost in boosters:
             char_list = ['<','@','!','>']
             try:
