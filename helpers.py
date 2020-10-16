@@ -13,6 +13,7 @@ import re
 ORDERS = "orders/"
 CHANNELS = "channels/"
 ASSOCIATIONS = 'associations.json'
+REACTIONS = 'reactions.json'
     
 
 def get_order(order_id, folder):
@@ -28,7 +29,7 @@ def get_order(order_id, folder):
 def generate_embed(ctx, title, desc):
     embed = discord.Embed(title=title, color=0x0FF0FF, description=desc)
     embed.set_author(name=f"{ctx.author.name}", icon_url=ctx.author.avatar_url)
-    embed.set_thumbnail(url=ctx.guild.icon_url_as(format="gif"))
+    embed.set_thumbnail(url='https://cdn.discordapp.com/attachments/725874308089643112/747078186411491429/pvmservicesgif.gif')
     return embed
 
 async def moveTicket(channel, ctx, config,embed, commandType):
@@ -141,7 +142,20 @@ def update_channel_entry(channelID, data):
     filename = f"{channelID}.json"
     with open(f"{CHANNELS}{filename}", "w") as f:
         json.dump(data,f,indent=4)
-    
+
+def get_reactions():
+    filename = f"{REACTIONS}"
+    data = None
+    with open(f"{filename}", "r") as f:
+        data = json.load(f)
+        f.close()
+    return data
+
+def add_reaction_entry(data):
+    filename = f"{REACTIONS}"
+    with open(f"{filename}", "w") as f:
+        json.dump(data,f,indent=4)
+
 def get_channel_order(orders, ordertype):
     active_orders = []
     for orderIndex in range(0,len(orders)):

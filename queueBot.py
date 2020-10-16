@@ -35,6 +35,47 @@ config = get_config()
 async def on_ready():
     callNextBooster.start()
 
+@client.event
+async def on_message(message):
+    channel = message.channel
+    if channel.id in config["jobs"]
+        emoji1 = client.get_emoji(758740596952662099)
+        await message.add_reaction(emoji1)
+        await client.process_commands(message)
+
+@client.event
+async def on_reaction_add(reaction, user):
+    if reaction.message.channel.id in config["jobs"]:
+        if reaction.emoji.id == 758740596952662099:
+            guild = client.get_guild(config['guild_id'])
+            member = guild.get_member(user.id)
+            if config["admin"] in [role.id for role in member.roles]:
+                emoji = client.get_emoji(758740596952662099)
+                if reaction.count > 1:
+                    data = helper.get_reactions()
+                    memberID = reaction.message.author.id
+                    if str(memberID) in data.keys():
+                        data[str(memberID)]['amount']+=.2
+                    else:
+                        data[str(memberID)] = {'amount': .2}
+                    helper.add_reaction_entry(data)
+                    await reaction.clear()
+
+@client.command()
+@commands.has_any_role(*config['staff'])
+async def processr(ctx):
+    data = helper.get_reactions()
+    embedMsg = discord.Embed(color=0x00ff00)
+    embedMsg.set_thumbnail(url='https://cdn.discordapp.com/attachments/725874308089643112/747078186411491429/pvmservicesgif.gif')
+    for key in data.keys():
+        user = client.get_user(int(key))
+        amount = data[key]["amount"]
+        if amount > 0:
+            embedMsg.add_field(name=f'{user.name}',value=f'-add <@{int(key)}> {amount}M',inline=False)
+        data[str(key)]["amount"] = 0.0
+    helper.add_reaction_entry(data)
+    await ctx.author.send(embed=embedMsg)
+
 async def callBoosters(channelMention,booster=None, number=None, calledByTimer=False):
     queueIter = queue.copy() #deep copy
     totalNeeded = sum(int(ticket['needed']) for ticket in tickets)
@@ -80,18 +121,24 @@ async def dario(ctx):
 @client.command()
 @commands.has_any_role(*config['pvm'])
 async def ready(ctx):
-    role = get(ctx.guild.roles, id=712383579505819719)
-    embed = helper.generate_embed(
-        ctx,
-        "-ready",
-        f"""
-        Your ticket has been paid and an order has been created.
-        You can type `-lft` when you are ready for a team. This will notify {role.mention} and move your ticket into the queue.
+    channel = ctx.channel    
+    ch_cat = channel.category_id
+    if ch_cat not in config["category_unmoveable"]:    
+        role = get(ctx.guild.roles, id=712383579505819719)
+        embed = helper.generate_embed(
+            ctx,
+            "-ready",
+            f"""
+            Your ticket has been paid and an order has been created.
+            You can type `-lft` when you are ready for a team. This will notify {role.mention} and move your ticket into the queue.
 
-        """,
-    )
-    await helper.moveTicket(ctx.channel, ctx, config,embed, 'ready')
-    await ctx.send(embed=embed)
+            """,
+        )
+        await helper.moveTicket(ctx.channel, ctx, config,embed, 'ready')
+        await ctx.send(embed=embed)
+        await ctx.message.delete()
+    else:
+        await ctx.send("Wrong ticket noob")        
 
 
 @client.command()
@@ -107,33 +154,40 @@ async def pause(ctx):
     )
     await helper.moveTicket(ctx.channel, ctx, config,embed, 'pause')
     await ctx.send(embed=embed)
+    await ctx.message.delete()
 
 @client.command()
 @commands.has_any_role(*config['pvm'])
 async def end(ctx):
-    embed = helper.generate_embed(
-        ctx,
-        "-end",
-        f"""
-            Your ticket (kill count) is now paused, or it has finished.
-            Remember to type `-lft` when you want to go again. See you soon!
-        """,
-    )        
-    for ticket in ongoingTickets:
-        if ticket['channel'] == ctx.channel:
-            for booster in ticket['team']:
-                if booster in inRaids:
-                    inRaids.remove(booster)
-            ongoingTickets.remove(ticket)
-    for ticket in tickets:
-        if ticket['channel'] == ctx.channel:
-            tickets.remove(ticket)
-            for booster in ticket['team']:
-                if booster in inRaids:
-                    inRaids.remove(booster)
-    await helper.moveTicket(ctx.channel, ctx, config,embed, 'end')
-    await ctx.send(embed=embed)
-    await ctx.message.delete()
+    channel = ctx.channel    
+    ch_cat = channel.category_id
+    if ch_cat not in config["category_unmoveable"]:
+        embed = helper.generate_embed(
+            ctx,
+            "-end",
+            f"""
+                Your ticket (kill count) is now paused, or it has finished.
+                Remember to type `-lft` when you want to go again. See you soon!
+            """,
+        )        
+        for ticket in ongoingTickets:
+            if ticket['channel'] == ctx.channel:
+                for booster in ticket['team']:
+                    if booster in inRaids:
+                        inRaids.remove(booster)
+                ongoingTickets.remove(ticket)
+        for ticket in tickets:
+            if ticket['channel'] == ctx.channel:
+                tickets.remove(ticket)
+                for booster in ticket['team']:
+                    if booster in inRaids:
+                        inRaids.remove(booster)
+        await helper.moveTicket(ctx.channel, ctx, config,embed, 'end')
+        await ctx.send(embed=embed)
+        await ctx.message.delete()
+    else:
+        await ctx.send("Wrong ticket noob")
+    
 
 def inTeam(booster):
     for ticket in tickets:
@@ -330,20 +384,25 @@ async def addtoq(ctx, booster, index=None):
 @commands.has_any_role(*config['pvm'])
 async def start(ctx):
     #get ticket
-    ticket = helper.getticket(ctx.channel, tickets)
-    if ticket is not None:
-        tickets.remove(ticket)
-        team = ticket['team']
-        ongoingTickets.append({'channel': ctx.channel, 'needed':0, 'team': team})
-        data = '<@&718075135147507832> Your team is '
-        for boost in team:
-            data = data + f'{boost.mention} '
-            if boost not in inRaids:
-                inRaids.append(boost)
-        await ticket['channel'].send(data)
-        await helper.awaitMoveChannel(ticket['channel'],config['category_ongoing'], ctx)
+    channel = ctx.channel    
+    ch_cat = channel.category_id
+    if ch_cat not in config["category_unmoveable"]:    
+        await helper.awaitMoveChannel(channel,config['category_ongoing'], ctx)
+        ticket = helper.getticket(channel, tickets)
+        if ticket is not None:
+            tickets.remove(ticket)
+            team = ticket['team']
+            ongoingTickets.append({'channel': channel, 'needed':0, 'team': team})
+            data = '<@&718075135147507832> Your team is '
+            for boost in team:
+                data = data + f'{boost.mention} '
+                if boost not in inRaids:
+                    inRaids.append(boost)
+            await ticket['channel'].send(data)
+        else:
+            return
     else:
-        return
+        await ctx.send("Wrong ticket noob")
 
 
 
@@ -412,13 +471,20 @@ async def createteam(ctx, *boosters):
         totalBoostersAvailable = len(boosters) - len(team)
         totalNeeded = totalBoostersAvailable + int(number) if number != None else totalBoostersAvailable
         if totalNeeded == 0:
+            pvmchan = get(ctx.message.guild.channels, id=config['pvm_tickets'], type=discord.ChannelType.text)
             ongoingTickets.append({'channel': ctx.channel, 'needed':0, 'team': team})
             inRaids.extend(team)
             data = '<@&718075135147507832> Your team is '
+            senddata = '```'
+            ch_name = ctx.channel.name.lower()
             for boost in team:
                 data = data + f'{boost.mention} '
+                senddata = senddata + f'{boost.name} '
                 if boost not in inRaids:
-                    inRaids.append(boost)
+                    inRaids.append(boost)   
+            if "tob" not in ch_name or "tob-login" in ch_name:    
+                senddata = senddata + f'is assigned to #{ctx.channel.name}```'
+                await pvmchan.send(senddata)      
             await ctx.channel.send(data)
             await helper.awaitMoveChannel(ctx.channel,config['category_ongoing'], ctx) 
         else:
